@@ -1,95 +1,71 @@
-name: Build Siêu Tốc APK
-
+name: Build Android APK
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [main]
+  workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # 'if:' không cho phép dùng thẳng context 'secrets' - phải gán ra biến env ở đây rồi so sánh qua env. bên dưới
-      HAS_RELEASE_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Giải nén nếu repo chỉ chứa file .zip (chưa giải nén tay)
-        run: |
-          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
-            echo "Đã có settings.gradle ở gốc repo, bỏ qua bước giải nén."
-            exit 0
-          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "::error::Không tìm thấy settings.gradle lẫn file .zip nào ở gốc repo."
-            exit 1
-          fi
-
-          echo "Tìm thấy $ZIP_FILE, đang giải nén..."
-          rm -rf _extracted
-          unzip -q -o "$ZIP_FILE" -d _extracted
-
-          # Nếu zip bọc mọi thứ trong 1 thư mục con (vd sieutoc/build.gradle) thì lấy thư mục đó làm gốc,
-          # còn nếu zip đã phẳng (build.gradle nằm ngay đầu zip) thì dùng luôn _extracted
-          TOP_ENTRIES=$(find _extracted -maxdepth 1 -mindepth 1)
-          TOP_COUNT=$(echo "$TOP_ENTRIES" | wc -l)
-          if [ "$TOP_COUNT" -eq 1 ] && [ -d "$TOP_ENTRIES" ]; then
-            SRC_DIR="$TOP_ENTRIES"
-          else
-            SRC_DIR="_extracted"
-          fi
-
-          cp -rT "$SRC_DIR" .
-          rm -rf _extracted "$ZIP_FILE"
-
-          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
-            echo "::error::Giải nén xong nhưng vẫn không thấy settings.gradle, kiểm tra lại cấu trúc file zip."
-            exit 1
-          fi
-          echo "Giải nén xong, đã có settings.gradle ở gốc repo."
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          # AGP 9.3.2 (bumped ở build.gradle root) yêu cầu Gradle TỐI THIỂU 9.5.0 - xem bảng
-          # Compatibility trong release notes AGP 9.3. Ghim 9.5.1 (bản ổn định mới nhất của
-          # nhánh 9.5.x tính đến 27/08/2026).
-          gradle-version: 9.5.1
+      - name: Install deps
+        run: npm install
 
-      - name: Decode release keystore
-        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/release.keystore
+      - name: Add Android platform if missing
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            npx cap sync android
+          fi
+
+      - name: Patch AndroidManifest.xml
+        run: python3 scripts/patch-manifest.py
+
+      - name: Copy native Kotlin sources
+        run: |
+          PKG_DIR="android/app/src/main/java/com/atun/translator"
+          mkdir -p "$PKG_DIR"
+          cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
+          cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
+          cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
+          cp native/ForegroundService.kt "$PKG_DIR/ForegroundService.kt"
+
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Package output as zip
+        run: |
+          mkdir -p release
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/atun-translator-debug.apk
+          cd release
+          zip -r atun-translator-build.zip atun-translator-debug.apk
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SieuToc-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: atun-translator-build
+          path: release/atun-translator-build.zip
 
-      - name: Build release APK (ký sẵn)
-        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon
-
-      - name: Upload release APK
-        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
+      - name: Upload raw APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SieuToc-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
