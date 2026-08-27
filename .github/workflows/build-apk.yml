@@ -10,6 +10,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unzip source if present
+        run: |
+          if [ -f "atun-translator-source.zip" ]; then
+            unzip -o atun-translator-source.zip -d .
+            echo "Unzipped source files into repo root"
+          fi
+          ls -la
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
