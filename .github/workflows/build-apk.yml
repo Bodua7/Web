@@ -30,18 +30,18 @@ jobs:
       - name: Install deps
         run: npm install
 
-      - name: Add Android platform if missing
+      - name: Clean and add Android platform (always fresh)
         run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          else
-            npx cap sync android
-          fi
+          rm -rf android
+          npx cap add android
 
       - name: Patch AndroidManifest.xml
         run: python3 scripts/patch-manifest.py
 
-      - name: Copy native Kotlin sources
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Copy native Kotlin sources (runs LAST, after sync)
         run: |
           PKG_DIR="android/app/src/main/java/com/atun/translator"
           mkdir -p "$PKG_DIR"
@@ -50,8 +50,20 @@ jobs:
           cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
           cp native/ForegroundService.kt "$PKG_DIR/ForegroundService.kt"
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: Debug - verify MainActivity actually has registerPlugin
+        run: |
+          PKG_DIR="android/app/src/main/java/com/atun/translator"
+          echo "=== Contents of $PKG_DIR ==="
+          ls -la "$PKG_DIR"
+          echo "=== MainActivity.kt content ==="
+          cat "$PKG_DIR/MainActivity.kt"
+          echo "=== Checking for registerPlugin line ==="
+          if grep -q "registerPlugin" "$PKG_DIR/MainActivity.kt"; then
+            echo "OK: registerPlugin found in file on disk before build."
+          else
+            echo "FAIL: registerPlugin NOT found. Aborting build."
+            exit 1
+          fi
 
       - name: Build debug APK
         run: |
