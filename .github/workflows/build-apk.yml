@@ -45,6 +45,12 @@ jobs:
         run: |
           PKG_DIR="android/app/src/main/java/com/atun/translator"
           mkdir -p "$PKG_DIR"
+          # Xoá MainActivity.java mặc định do `cap add` sinh ra để tránh
+          # duplicate class với MainActivity.kt tự viết (nguyên nhân gốc
+          # khiến OverlayPlugin không được đăng ký: build thật ra fail
+          # ở bước assembleDebug vì "Redeclaration: MainActivity", nên
+          # APK cài vào máy là artifact cũ từ 1 lần chạy trước đó).
+          rm -f "$PKG_DIR/MainActivity.java"
           cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
           cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
           cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
@@ -55,6 +61,10 @@ jobs:
           PKG_DIR="android/app/src/main/java/com/atun/translator"
           echo "=== Contents of $PKG_DIR ==="
           ls -la "$PKG_DIR"
+          if [ -f "$PKG_DIR/MainActivity.java" ]; then
+            echo "FAIL: MainActivity.java van con ton tai song song voi .kt -> se bi duplicate class."
+            exit 1
+          fi
           echo "=== MainActivity.kt content ==="
           cat "$PKG_DIR/MainActivity.kt"
           echo "=== Checking for registerPlugin line ==="
