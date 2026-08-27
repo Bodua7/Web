@@ -60,10 +60,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          # AGP 9.2.0 yêu cầu Gradle TỐI THIỂU 9.4.1 (không phải cùng số hiệu như đoán ban đầu -
-          # log build đã báo rõ "Minimum supported Gradle version is 9.4.1. Current version is
-          # 9.2.0."). Ghim đúng 9.4.1 để khớp yêu cầu tối thiểu này.
-          gradle-version: 9.4.1
+          # AGP 9.3.2 (bumped ở build.gradle root) yêu cầu Gradle TỐI THIỂU 9.5.0 - xem bảng
+          # Compatibility trong release notes AGP 9.3. Ghim 9.5.1 (bản ổn định mới nhất của
+          # nhánh 9.5.x tính đến 27/08/2026).
+          gradle-version: 9.5.1
 
       - name: Decode release keystore
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
