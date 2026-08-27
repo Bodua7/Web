@@ -59,6 +59,12 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # Ghim đúng bản Gradle tương thích với Android Gradle Plugin 8.5.0 đang khai trong
+          # build.gradle của project - nếu để trống, action sẽ dùng bản Gradle có sẵn trên runner
+          # (hiện đang rất mới, gần bản 10), gây cảnh báo/lỗi không tương thích như log build
+          # trước đã thấy ("Deprecated Gradle features... incompatible with Gradle 10").
+          gradle-version: 8.7
 
       - name: Decode release keystore
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
