@@ -60,10 +60,10 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          # AGP 9.2.0 (nâng cùng lúc với build.gradle của project để hỗ trợ compileSdk 37 mà
-          # GeckoView yêu cầu) BẮT BUỘC Gradle 9.x - Gradle 8.7 (dùng ở lần build trước) không
-          # còn đủ nữa. Ghim đúng 9.2.0 để khớp AGP, tránh runner tự chọn bản khác không tương thích.
-          gradle-version: 9.2.0
+          # AGP 9.2.0 yêu cầu Gradle TỐI THIỂU 9.4.1 (không phải cùng số hiệu như đoán ban đầu -
+          # log build đã báo rõ "Minimum supported Gradle version is 9.4.1. Current version is
+          # 9.2.0."). Ghim đúng 9.4.1 để khớp yêu cầu tối thiểu này.
+          gradle-version: 9.4.1
 
       - name: Decode release keystore
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
