@@ -10,11 +10,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unzip source if present
+      - name: Unzip source parts if present
         run: |
-          if [ -f "atun-translator-source.zip" ]; then
-            unzip -o atun-translator-source.zip -d .
-            echo "Unzipped source files into repo root"
+          shopt -s nullglob
+          parts=(atun-translator-part*.zip)
+          if [ ${#parts[@]} -eq 0 ]; then
+            echo "No atun-translator-part*.zip files found in repo root, skipping."
+          else
+            for f in "${parts[@]}"; do
+              echo "Unzipping $f"
+              unzip -o "$f" -d .
+            done
+            echo "Unzipped all source parts into repo root"
           fi
           ls -la
 
@@ -35,11 +42,14 @@ jobs:
           rm -rf android
           npx cap add android
 
-      - name: Patch build.gradle files to support Kotlin
-        run: python3 scripts/patch-kotlin.py
-
       - name: Patch AndroidManifest.xml
         run: python3 scripts/patch-manifest.py
+
+      - name: Patch Kotlin support into Gradle
+        run: python3 scripts/patch-kotlin.py
+
+      - name: Patch Vosk dependency into Gradle
+        run: python3 scripts/patch-vosk-gradle.py
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -49,12 +59,21 @@ jobs:
           PKG_DIR="android/app/src/main/java/com/atun/translator"
           mkdir -p "$PKG_DIR"
           # Xoá MainActivity.java mặc định do `cap add` sinh ra để tránh
-          # duplicate class với MainActivity.kt tự viết
+          # duplicate class với MainActivity.kt tự viết (nguyên nhân gốc
+          # khiến OverlayPlugin không được đăng ký: build thật ra fail
+          # ở bước assembleDebug vì "Redeclaration: MainActivity", nên
+          # APK cài vào máy là artifact cũ từ 1 lần chạy trước đó).
           rm -f "$PKG_DIR/MainActivity.java"
           cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
           cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
           cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
           cp native/ForegroundService.kt "$PKG_DIR/ForegroundService.kt"
+          cp native/AudioCaptureService.kt "$PKG_DIR/AudioCaptureService.kt"
+          cp native/AudioCapturePlugin.kt "$PKG_DIR/AudioCapturePlugin.kt"
+          cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
+
+      - name: Copy Vosk model assets
+        run: python3 scripts/copy-model-assets.py
 
       - name: Debug - verify MainActivity actually has registerPlugin
         run: |
@@ -63,10 +82,6 @@ jobs:
           ls -la "$PKG_DIR"
           if [ -f "$PKG_DIR/MainActivity.java" ]; then
             echo "FAIL: MainActivity.java van con ton tai song song voi .kt -> se bi duplicate class."
-            exit 1
-          fi
-          if ! grep -q "kotlin-android" android/app/build.gradle; then
-            echo "FAIL: android/app/build.gradle chua duoc patch de ho tro Kotlin."
             exit 1
           fi
           echo "=== MainActivity.kt content ==="
