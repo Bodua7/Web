@@ -67,7 +67,6 @@ jobs:
           cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
           cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
           cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
-          cp native/ForegroundService.kt "$PKG_DIR/ForegroundService.kt"
           cp native/AudioCaptureService.kt "$PKG_DIR/AudioCaptureService.kt"
           cp native/AudioCapturePlugin.kt "$PKG_DIR/AudioCapturePlugin.kt"
           cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
