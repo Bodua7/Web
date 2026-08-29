@@ -4,6 +4,12 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Cần quyền ghi (contents: write) để bước tạo/cập nhật GitHub Release "latest" kèm APK ở cuối
+# file có thể tạo release + upload file đính kèm bằng GITHUB_TOKEN mặc định (không cần tạo
+# Personal Access Token riêng).
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -70,11 +76,6 @@ jobs:
         run: |
           PKG_DIR="android/app/src/main/java/com/atun/translator"
           mkdir -p "$PKG_DIR"
-          # Xoá MainActivity.java mặc định do `cap add` sinh ra để tránh
-          # duplicate class với MainActivity.kt tự viết (nguyên nhân gốc
-          # khiến OverlayPlugin không được đăng ký: build thật ra fail
-          # ở bước assembleDebug vì "Redeclaration: MainActivity", nên
-          # APK cài vào máy là artifact cũ từ 1 lần chạy trước đó).
           rm -f "$PKG_DIR/MainActivity.java"
           cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
           cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
@@ -85,6 +86,9 @@ jobs:
           cp native/MlkitTranslatePlugin.kt "$PKG_DIR/MlkitTranslatePlugin.kt"
           cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
           cp native/VadDetector.kt "$PKG_DIR/VadDetector.kt"
+          cp native/ExportPlugin.kt "$PKG_DIR/ExportPlugin.kt"
+          cp native/AppLog.kt "$PKG_DIR/AppLog.kt"
+          cp native/TtsPlugin.kt "$PKG_DIR/TtsPlugin.kt"
 
       - name: Copy Vosk model assets
         run: python3 scripts/copy-model-assets.py
@@ -95,16 +99,13 @@ jobs:
           echo "=== Contents of $PKG_DIR ==="
           ls -la "$PKG_DIR"
           if [ -f "$PKG_DIR/MainActivity.java" ]; then
-            echo "FAIL: MainActivity.java van con ton tai song song voi .kt -> se bi duplicate class."
+            echo "FAIL"
             exit 1
           fi
-          echo "=== MainActivity.kt content ==="
-          cat "$PKG_DIR/MainActivity.kt"
-          echo "=== Checking for registerPlugin line ==="
           if grep -q "registerPlugin" "$PKG_DIR/MainActivity.kt"; then
-            echo "OK: registerPlugin found in file on disk before build."
+            echo "OK"
           else
-            echo "FAIL: registerPlugin NOT found. Aborting build."
+            echo "FAIL"
             exit 1
           fi
 
@@ -133,8 +134,6 @@ jobs:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      # ===== Release build (minify + shrink, ký bằng keystore riêng nếu đã cấu hình secret,
-      # nếu chưa thì tự fallback dùng debug keystore - xem scripts/patch-release-build.py) =====
       - name: Decode release keystore (nếu đã cấu hình secret riêng)
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         run: |
@@ -168,3 +167,127 @@ jobs:
         with:
           name: app-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Copy release APK sang tên file cố định (dùng cho link tải công khai)
+        run: cp android/app/build/outputs/apk/release/app-release.apk release/atun-translator.apk
+
+      # Tạo/cập nhật 1 GitHub Release duy nhất (tag "latest") kèm APK - cho link tải công khai
+      # CỐ ĐỊNH, không cần đăng nhập GitHub, dùng được ngay trên trang web-mini (index.html):
+      #   https://github.com/<user>/<repo>/releases/latest/download/atun-translator.apk
+      # Khác Artifact của Actions (bắt buộc đăng nhập, tự xoá sau 90 ngày, link đổi mỗi build).
+      - name: Tạo/cập nhật GitHub Release "latest" kèm APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest release/atun-translator.apk \
+            --title "Atun Translator (build tự động)" \
+            --notes "Build tự động từ GitHub Actions - commit ${{ github.sha }}. Bản release ký bằng keystore riêng (nếu đã cấu hình secret ANDROID_KEYSTORE_BASE64) hoặc debug keystore (chỉ để tự cài/side-load, KHÔNG dùng để phát hành Play Store - và có thể không cài đè lên bản cũ được nếu chữ ký debug keystore đổi giữa các lần build, phải gỡ cài đặt bản cũ trước)." \
+            --latest
+
+  # ===== iOS - CHỈ build thử cho Simulator, KHÔNG ký =====
+  # Không có tài khoản Apple Developer/chứng chỉ ký -> không thể tạo .ipa cài lên iPhone thật
+  # hay phát hành App Store. Job này chỉ để biết code có build được cho iOS hay không và có
+  # cái để chạy thử trên Simulator (macOS + Xcode). Vì mọi plugin native (AudioCapture, Vosk,
+  # ModelManager, MlkitTranslate, Tts, Export...) đều CHỈ viết bằng Kotlin cho Android, bản
+  # iOS này chỉ có UI (www/index.html) - các nút nghe/tải model/đọc to sẽ không hoạt động
+  # (code JS đã tự kiểm tra plugin có tồn tại trước khi gọi nên không bị crash, chỉ báo lỗi
+  # trong log kỹ thuật của app).
+  build-ios-simulator:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip source parts if present
+        run: |
+          shopt -s nullglob
+          parts=(atun-translator-part*.zip)
+          if [ ${#parts[@]} -eq 0 ]; then
+            echo "No atun-translator-part*.zip files found in repo root, skipping."
+          else
+            for f in "${parts[@]}"; do
+              echo "Unzipping $f"
+              unzip -o "$f" -d .
+            done
+          fi
+          ls -la
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm install
+
+      - name: Clean and add iOS platform (always fresh)
+        run: |
+          rm -rf ios
+          npx cap add ios
+
+      - name: Sync Capacitor (copy www/ vào project iOS + pod install)
+        run: npx cap sync ios
+
+      - name: Build cho iOS Simulator (không ký - CODE_SIGNING_ALLOWED=NO)
+        run: |
+          cd ios/App
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Đóng gói bản .app thành zip
+        run: |
+          cd ios/App/build/Build/Products/Debug-iphonesimulator
+          ls -la
+          zip -r atun-translator-ios-simulator.zip App.app
+
+      - name: Upload bản build Simulator
+        uses: actions/upload-artifact@v4
+        with:
+          name: atun-translator-ios-simulator
+          path: ios/App/build/Build/Products/Debug-iphonesimulator/atun-translator-ios-simulator.zip
+
+  # ===== Windows .exe qua Electron - đóng gói TOÀN BỘ UI app chính (www/index.html) =====
+  # Cùng lý do như iOS: không có plugin native cho Windows, nên các nút nghe/overlay/đọc to/
+  # tải model sẽ không hoạt động thật, chỉ hiện UI để xem/thử. Xem electron/main.js để biết
+  # chi tiết cách app desktop này load www/index.html (qua local server, không phải file://
+  # trực tiếp, để tránh lỗi CORS với <script type="module">).
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip source parts if present
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem -Path . -Filter "atun-translator-part*.zip"
+          if ($parts.Count -eq 0) {
+            Write-Host "No atun-translator-part*.zip files found in repo root, skipping."
+          } else {
+            foreach ($f in $parts) {
+              Write-Host "Unzipping $($f.Name)"
+              Expand-Archive -Path $f.FullName -DestinationPath . -Force
+            }
+          }
+          Get-ChildItem
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps (bao gồm electron + electron-builder)
+        run: npm install
+
+      - name: Build Windows .exe qua electron-builder
+        run: npm run build:win
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atun-translator-windows-exe
+          path: |
+            dist_electron/*.exe
