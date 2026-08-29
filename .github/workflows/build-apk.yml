@@ -7,6 +7,12 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # GitHub Actions KHÔNG cho dùng context `secrets` trực tiếp trong `if:` của step
+    # (lỗi "Unrecognized named-value: 'secrets'"). Cách chuẩn: gán ra biến env ở
+    # cấp job (env context ĐƯỢC phép đọc secrets khi định nghĩa), rồi so sánh env.X
+    # trong if: ở dưới.
+    env:
+      HAS_RELEASE_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -125,7 +131,7 @@ jobs:
       # ===== Release build (minify + shrink, ký bằng keystore riêng nếu đã cấu hình secret,
       # nếu chưa thì tự fallback dùng debug keystore - xem scripts/patch-release-build.py) =====
       - name: Decode release keystore (nếu đã cấu hình secret riêng)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
 
