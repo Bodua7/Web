@@ -57,6 +57,9 @@ jobs:
       - name: Patch Vosk dependency into Gradle
         run: python3 scripts/patch-vosk-gradle.py
 
+      - name: Patch ML Kit Translate dependency into Gradle
+        run: python3 scripts/patch-mlkit-gradle.py
+
       - name: Patch release signing + minify/proguard into Gradle
         run: python3 scripts/patch-release-build.py
 
@@ -79,7 +82,9 @@ jobs:
           cp native/AudioCaptureService.kt "$PKG_DIR/AudioCaptureService.kt"
           cp native/AudioCapturePlugin.kt "$PKG_DIR/AudioCapturePlugin.kt"
           cp native/ModelManagerPlugin.kt "$PKG_DIR/ModelManagerPlugin.kt"
+          cp native/MlkitTranslatePlugin.kt "$PKG_DIR/MlkitTranslatePlugin.kt"
           cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
+          cp native/VadDetector.kt "$PKG_DIR/VadDetector.kt"
 
       - name: Copy Vosk model assets
         run: python3 scripts/copy-model-assets.py
