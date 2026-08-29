@@ -51,6 +51,9 @@ jobs:
       - name: Patch Vosk dependency into Gradle
         run: python3 scripts/patch-vosk-gradle.py
 
+      - name: Patch release signing + minify/proguard into Gradle
+        run: python3 scripts/patch-release-build.py
+
       - name: Sync Capacitor
         run: npx cap sync android
 
@@ -69,6 +72,7 @@ jobs:
           cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
           cp native/AudioCaptureService.kt "$PKG_DIR/AudioCaptureService.kt"
           cp native/AudioCapturePlugin.kt "$PKG_DIR/AudioCapturePlugin.kt"
+          cp native/ModelManagerPlugin.kt "$PKG_DIR/ModelManagerPlugin.kt"
           cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
 
       - name: Copy Vosk model assets
@@ -99,21 +103,57 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Package output as zip
+      - name: Package debug output as zip
         run: |
           mkdir -p release
           cp android/app/build/outputs/apk/debug/app-debug.apk release/atun-translator-debug.apk
           cd release
           zip -r atun-translator-build.zip atun-translator-debug.apk
 
-      - name: Upload zip artifact
+      - name: Upload debug zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: atun-translator-build
           path: release/atun-translator-build.zip
 
-      - name: Upload raw APK artifact
+      - name: Upload raw debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      # ===== Release build (minify + shrink, ký bằng keystore riêng nếu đã cấu hình secret,
+      # nếu chưa thì tự fallback dùng debug keystore - xem scripts/patch-release-build.py) =====
+      - name: Decode release keystore (nếu đã cấu hình secret riêng)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Build release APK (minified, ký bằng keystore riêng hoặc debug keystore)
+        env:
+          RELEASE_KEYSTORE_PATH: release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Package release output as zip
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk release/atun-translator-release.apk
+          cd release
+          zip -r atun-translator-release-build.zip atun-translator-release.apk
+
+      - name: Upload release zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atun-translator-release-build
+          path: release/atun-translator-release-build.zip
+
+      - name: Upload raw release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
