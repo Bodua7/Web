@@ -37,6 +37,31 @@ jobs:
           fi
           ls -la
 
+      # ===== Test harness (tests/vad, tests/translate, tests/model_catalog) =====
+      # Chạy NGAY SAU khi unzip source, TRƯỚC khi build Android (build thật tốn nhiều phút) -
+      # để fail nhanh nếu code/catalog có lỗi rõ ràng, thay vì đợi build xong cả chục phút rồi
+      # mới biết. tests/model_catalog đặc biệt quan trọng: nó đọc THẲNG CATALOG thật trong
+      # native/ModelManagerPlugin.kt và (với -m network) gửi HEAD request kiểm tra từng URL model
+      # (kể cả mirrorUrl dự phòng) có thật sự tải được không - đây chính là lớp bug đã từng gặp
+      # (URL sai/model gỡ bỏ chỉ phát hiện được lúc bấm tải trên máy thật, báo "Lỗi tải - thử
+      # lại"). CI có mạng thật nên chạy được cả test mạng ở đây, không chỉ test tĩnh.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cài pytest cho test harness
+        run: pip install pytest
+
+      - name: Chạy test harness (vad, translate, model_catalog)
+        run: |
+          set -e
+          echo "== tests/vad =="
+          (cd tests/vad && pytest -v)
+          echo "== tests/translate =="
+          (cd tests/translate && pytest -v)
+          echo "== tests/model_catalog (kèm kiểm tra mạng thật -m network) =="
+          (cd tests/model_catalog && pytest -v -m network)
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
