@@ -1,4 +1,3 @@
-
 name: Build Android APK
 on:
   push:
@@ -37,6 +36,22 @@ jobs:
             echo "Unzipped all source parts into repo root"
           fi
           ls -la
+
+      # ===== Ghép lại các file model bị cắt mảnh (Gr.fst/HCLr.fst/final.mdl/final.ie -
+      # <tên gốc>.part000, .part001...) - do các file này quá lớn để upload qua GitHub trên di
+      # động nên đã cắt nhỏ trước khi commit (xem scripts/join-split-parts.py). Chạy NGAY SAU
+      # bước unzip ở trên, TRƯỚC copy-model-assets.py (bước đó cần file model NGUYÊN VẸN, không
+      # phải các mảnh .partNNN) - nếu thiếu bước này, APK build ra sẽ có model rỗng/hỏng mà
+      # không báo lỗi rõ ràng ở bước nào cả. Guard bằng [ -f ... ]: repo có thể không dùng cơ chế
+      # part*.zip/cắt mảnh (vd commit thẳng model không qua part*.zip) - lúc đó không có file
+      # .partNNN nào, script tự in cảnh báo rồi bỏ qua, không chặn build.
+      - name: Ghép lại các file model bị cắt mảnh (nếu có)
+        run: |
+          if [ -f scripts/join-split-parts.py ]; then
+            python3 scripts/join-split-parts.py
+          else
+            echo "Không thấy scripts/join-split-parts.py - bỏ qua bước ghép mảnh."
+          fi
 
       # ===== Test harness (tests/vad, tests/translate, tests/model_catalog) =====
       # Chạy NGAY SAU khi unzip source, TRƯỚC khi build Android (build thật tốn nhiều phút) -
