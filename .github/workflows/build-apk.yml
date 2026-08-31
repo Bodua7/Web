@@ -38,6 +38,24 @@ jobs:
         with:
           python-version: '3.11'
 
+      # GitHub KHÔNG tự giải nén file .zip lúc upload - nếu bạn commit thẳng các file
+      # atun-translator-part*.zip (chưa tự giải nén trên máy/điện thoại), bước này tự giải nén
+      # chúng ra gốc repo trước khi npm install/build. Nếu source đã ở dạng thư mục thật (đã tự
+      # giải nén rồi mới commit) thì bước này tự bỏ qua, không làm gì cả.
+      - name: Extract project source (nếu còn ở dạng .zip)
+        run: |
+          shopt -s nullglob
+          zips=(atun-translator-part*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "Không thấy file atun-translator-part*.zip nào ở gốc repo - coi như source đã được giải nén sẵn (bỏ qua bước này)."
+          else
+            for z in "${zips[@]}"; do
+              echo "Giải nén $z"
+              unzip -o -q "$z" -d .
+            done
+          fi
+          test -f package.json || { echo "::error::Vẫn không thấy package.json sau khi giải nén - kiểm tra lại các file .zip đã commit đủ 4 part chưa (native/www/config-scripts/backend-tests)."; exit 1; }
+
       - name: Install npm deps
         run: npm install
 
