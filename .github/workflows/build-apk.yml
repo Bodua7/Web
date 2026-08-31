@@ -64,8 +64,21 @@ jobs:
 
       - name: Copy native Kotlin sources vào package com.atun.translator
         run: |
-          mkdir -p android/app/src/main/java/com/atun/translator
-          cp native/*.kt android/app/src/main/java/com/atun/translator/
+          set -e
+          dest=android/app/src/main/java/com/atun/translator
+          mkdir -p "$dest"
+          # npx cap add android tự sinh sẵn 1 vài file .java mặc định trong đúng thư mục package
+          # này (dựa theo appId trong capacitor.config.ts), ít nhất là MainActivity.java. Các file
+          # .kt trong native/ là bản tùy biến THAY THẾ hẳn - nếu không xoá file .java trùng tên
+          # trước, cả 2 (.java lẫn .kt) cùng định nghĩa 1 class, dexBuilderDebug sẽ fail với lỗi
+          # "Type ... is defined multiple times". Xoá theo từng basename khớp với file .kt sắp
+          # copy sang (không xoá bừa cả thư mục, phòng khi sau này có thêm file .java khác không
+          # liên quan).
+          for f in native/*.kt; do
+            base=$(basename "$f" .kt)
+            rm -f "$dest/$base.java"
+          done
+          cp native/*.kt "$dest/"
 
       - name: Patch Gradle/Manifest (Kotlin, Vosk, ML Kit, permissions)
         run: |
