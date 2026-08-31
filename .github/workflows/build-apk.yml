@@ -91,16 +91,22 @@ jobs:
         run: chmod +x android/gradlew
 
       # ===== Nhánh RELEASE: chỉ chạy khi workflow_dispatch với build_release=true. =====
+      # "id: decode_keystore" để bước upload artifact bên dưới đọc được output
+      # signed_with_release_key, đặt tên file APK khác đi nếu rơi vào trường hợp ký tạm bằng
+      # debug keystore - tránh lầm tưởng đó là bản đã ký thật bằng key phát hành.
       - name: Decode release keystore
+        id: decode_keystore
         if: github.event_name == 'workflow_dispatch' && inputs.build_release
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "Chưa set secret ANDROID_KEYSTORE_BASE64 - patch-release-build.py sẽ tự dùng debug keystore (chỉ để side-load, không dùng phát hành Play Store)."
+            echo "::warning::Chưa set secret ANDROID_KEYSTORE_BASE64 - patch-release-build.py sẽ tự dùng debug keystore. Bản release này CHỈ để tự cài lên máy (side-load) - KHÔNG dùng phát hành Play Store hay gửi cho người khác, vì chữ ký không ổn định giữa các lần build trên máy ảo CI khác nhau (không giữ được đường cập nhật mượt)."
+            echo "signed_with_release_key=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          echo "signed_with_release_key=true" >> "$GITHUB_OUTPUT"
 
       - name: Patch release build (signing + minify + Proguard)
         if: github.event_name == 'workflow_dispatch' && inputs.build_release
@@ -116,11 +122,15 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
+      # Tên artifact tự thêm hậu tố "-UNSIGNED-debugkey" nếu bước "Decode release keystore" ở
+      # trên không tìm thấy secret ANDROID_KEYSTORE_BASE64 - giúp thấy NGAY trên trang Actions
+      # (không cần mở log) khi bản release tải về chỉ ký tạm bằng debug keystore, chưa phải
+      # bản ký thật để phát hành.
       - name: Upload release APK
         if: github.event_name == 'workflow_dispatch' && inputs.build_release
         uses: actions/upload-artifact@v4
         with:
-          name: atun-translator-release
+          name: atun-translator-release${{ steps.decode_keystore.outputs.signed_with_release_key == 'true' && '' || '-UNSIGNED-debugkey' }}
           path: android/app/build/outputs/apk/release/*.apk
 
       # ===== Nhánh DEBUG: mặc định cho push/PR, hoặc workflow_dispatch không tick build_release. =====
