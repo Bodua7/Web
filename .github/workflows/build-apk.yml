@@ -25,9 +25,15 @@ jobs:
       - name: Unzip source parts if present
         run: |
           shopt -s nullglob
-          parts=(atun-translator-part*.zip)
+          # Khớp cả 2 kiểu file zip commit vào repo root:
+          #  - atun-translator-part*.zip : kiểu cũ, source bị cắt thành nhiều phần
+          #  - atun-translator-source.zip: kiểu mới, GitHub di động không hỗ trợ tải cả thư
+          #    mục qua giao diện web nên toàn bộ source được nén CHUNG vào 1 file zip duy nhất
+          #    (project giờ rất nhẹ, không còn model bundle lớn nên không cần cắt phần nữa) -
+          #    chỉ cần commit đúng 1 file .zip này vào repo root là đủ.
+          parts=(atun-translator-part*.zip atun-translator-source.zip)
           if [ ${#parts[@]} -eq 0 ]; then
-            echo "No atun-translator-part*.zip files found in repo root, skipping."
+            echo "No atun-translator-part*.zip / atun-translator-source.zip files found in repo root, skipping."
           else
             for f in "${parts[@]}"; do
               echo "Unzipping $f"
@@ -36,22 +42,6 @@ jobs:
             echo "Unzipped all source parts into repo root"
           fi
           ls -la
-
-      # ===== Ghép lại các file model bị cắt mảnh (Gr.fst/HCLr.fst/final.mdl/final.ie -
-      # <tên gốc>.part000, .part001...) - do các file này quá lớn để upload qua GitHub trên di
-      # động nên đã cắt nhỏ trước khi commit (xem scripts/join-split-parts.py). Chạy NGAY SAU
-      # bước unzip ở trên, TRƯỚC copy-model-assets.py (bước đó cần file model NGUYÊN VẸN, không
-      # phải các mảnh .partNNN) - nếu thiếu bước này, APK build ra sẽ có model rỗng/hỏng mà
-      # không báo lỗi rõ ràng ở bước nào cả. Guard bằng [ -f ... ]: repo có thể không dùng cơ chế
-      # part*.zip/cắt mảnh (vd commit thẳng model không qua part*.zip) - lúc đó không có file
-      # .partNNN nào, script tự in cảnh báo rồi bỏ qua, không chặn build.
-      - name: Ghép lại các file model bị cắt mảnh (nếu có)
-        run: |
-          if [ -f scripts/join-split-parts.py ]; then
-            python3 scripts/join-split-parts.py
-          else
-            echo "Không thấy scripts/join-split-parts.py - bỏ qua bước ghép mảnh."
-          fi
 
       # ===== Test harness (tests/vad, tests/translate, tests/model_catalog) =====
       # Chạy NGAY SAU khi unzip source, TRƯỚC khi build Android (build thật tốn nhiều phút) -
@@ -130,20 +120,24 @@ jobs:
           mkdir -p "$PKG_DIR"
           rm -f "$PKG_DIR/MainActivity.java"
           cp native/MainActivity.kt "$PKG_DIR/MainActivity.kt"
-          cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
-          cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
           cp native/AudioCaptureService.kt "$PKG_DIR/AudioCaptureService.kt"
           cp native/AudioCapturePlugin.kt "$PKG_DIR/AudioCapturePlugin.kt"
           cp native/ModelManagerPlugin.kt "$PKG_DIR/ModelManagerPlugin.kt"
           cp native/MlkitTranslatePlugin.kt "$PKG_DIR/MlkitTranslatePlugin.kt"
           cp native/VoskEngine.kt "$PKG_DIR/VoskEngine.kt"
+          cp native/MultiLangVoskEngine.kt "$PKG_DIR/MultiLangVoskEngine.kt"
+          cp native/SttEngine.kt "$PKG_DIR/SttEngine.kt"
           cp native/VadDetector.kt "$PKG_DIR/VadDetector.kt"
           cp native/ExportPlugin.kt "$PKG_DIR/ExportPlugin.kt"
           cp native/AppLog.kt "$PKG_DIR/AppLog.kt"
           cp native/TtsPlugin.kt "$PKG_DIR/TtsPlugin.kt"
-
-      - name: Copy Vosk model assets
-        run: python3 scripts/copy-model-assets.py
+          cp native/BrowserActivity.kt "$PKG_DIR/BrowserActivity.kt"
+          cp native/BrowserStorage.kt "$PKG_DIR/BrowserStorage.kt"
+          cp native/AdBlockList.kt "$PKG_DIR/AdBlockList.kt"
+          cp native/BrowserLauncherPlugin.kt "$PKG_DIR/BrowserLauncherPlugin.kt"
+          cp native/OverlayWindowPlugin.kt "$PKG_DIR/OverlayWindowPlugin.kt"
+          cp native/OverlayView.kt "$PKG_DIR/OverlayView.kt"
+          cp native/ScreenOrientationPlugin.kt "$PKG_DIR/ScreenOrientationPlugin.kt"
 
       - name: Debug - verify MainActivity actually has registerPlugin
         run: |
