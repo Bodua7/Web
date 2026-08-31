@@ -31,7 +31,17 @@ jobs:
           #    mục qua giao diện web nên toàn bộ source được nén CHUNG vào 1 file zip duy nhất
           #    (project giờ rất nhẹ, không còn model bundle lớn nên không cần cắt phần nữa) -
           #    chỉ cần commit đúng 1 file .zip này vào repo root là đủ.
-          parts=(atun-translator-part*.zip atun-translator-source.zip)
+          # BUG đã sửa: "atun-translator-source.zip" là tên cố định, KHÔNG có ký tự đại diện
+          # (*), nên `shopt -s nullglob` không có tác dụng với nó - nullglob chỉ tự loại bỏ các
+          # PATTERN không khớp file nào (như atun-translator-part*.zip), còn 1 chuỗi cố định thì
+          # bash luôn giữ nguyên trong mảng dù file không tồn tại. Kết quả: build luôn fail với
+          # lỗi "cannot find or open atun-translator-source.zip" mỗi khi chỉ commit các file
+          # part*.zip mà không có source.zip. Sửa bằng cách kiểm tra tồn tại riêng bằng [ -f ... ]
+          # trước khi thêm vào mảng, thay vì để nullglob (chỉ áp dụng đúng cho part*.zip) tự lo.
+          parts=(atun-translator-part*.zip)
+          if [ -f atun-translator-source.zip ]; then
+            parts+=(atun-translator-source.zip)
+          fi
           if [ ${#parts[@]} -eq 0 ]; then
             echo "No atun-translator-part*.zip / atun-translator-source.zip files found in repo root, skipping."
           else
