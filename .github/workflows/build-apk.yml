@@ -56,6 +56,23 @@ jobs:
           fi
           test -f package.json || { echo "::error::Vẫn không thấy package.json sau khi giải nén - kiểm tra lại các file .zip đã commit đủ 4 part chưa (native/www/config-scripts/backend-tests)."; exit 1; }
 
+      # ===== Typecheck 2 Supabase Edge Function (groq-relay, youtube-extract) bằng chính
+      # trình biên dịch Deno - bắt lỗi cú pháp/kiểu TypeScript NGAY ở CI thay vì phải đợi
+      # `supabase functions deploy` thất bại (bước deploy KHÔNG nằm trong workflow này, làm thủ
+      # công). Đặt SỚM (trước khi tốn phút build Android nặng bên dưới) để fail nhanh nếu lỗi.
+      # LƯU Ý: từ khi groq-relay import @supabase/supabase-js qua esm.sh (dùng cho bảng
+      # translate_quota_status - theo dõi hết quota theo tháng), bước `deno check` này CẦN
+      # mạng để tải/phân giải import đó (khác trước đây khi cả 2 file chỉ dùng Deno.* built-in,
+      # không cần mạng) - GitHub-hosted runner có sẵn mạng nên không cần thêm cấu hình gì, chỉ
+      # ghi chú lại để không ai tưởng nhầm bước này vẫn hoàn toàn offline.
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typecheck Supabase Edge Functions
+        run: deno check supabase-functions/groq-relay/index.ts supabase-functions/youtube-extract/index.ts
+
       - name: Install npm deps
         run: npm install
 
@@ -85,6 +102,7 @@ jobs:
           python3 scripts/patch-kotlin.py
           python3 scripts/patch-vosk-gradle.py
           python3 scripts/patch-mlkit-gradle.py
+          python3 scripts/patch-onnx-gradle.py
           python3 scripts/patch-manifest.py
 
       - name: Grant execute permission cho gradlew
@@ -152,4 +170,4 @@ jobs:
       - name: Run Python tests
         run: |
           pip install pytest requests
-          pytest tests/vad tests/translate tests/model_catalog tests/caption_frame tests/cloud_stt_segment -v
+          pytest tests/vad tests/translate tests/model_catalog tests/caption_frame tests/cloud_stt_segment tests/vosk_smart_pause tests/adblock tests/browser_url -v
