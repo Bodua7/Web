@@ -48,7 +48,7 @@ jobs:
           node-version: '20'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           # Fix (audit): trước đây 3.11 trong khi báo cáo audit bên ngoài ghi nhận pyproject.toml
           # của repo yêu cầu ">=3.13" - lệch version giữa local/CI làm mất tính reproducible.
