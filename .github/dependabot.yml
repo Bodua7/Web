@@ -1,0 +1,30 @@
+# .github/dependabot.yml
+#
+# Chỉ bật 2 ecosystem có manifest THẬT trong repo: npm (package.json) và github-actions (chính
+# file android-build.yml/codeql.yml). KHÔNG bật ecosystem "pip" - repo chưa có requirements.txt/
+# Pipfile (bước cài pytest/ruff trong android-build.yml chỉ chạy `pip install "gói>=x,<y"` trực
+# tiếp trong workflow, không có file manifest riêng cho Dependabot đọc) - bật ecosystem không có
+# manifest sẽ chỉ tạo cảnh báo lỗi vô ích trong tab Dependabot mà không có gì để cập nhật. Nếu
+# sau này tạo requirements.txt thật, thêm lại 1 khối "package-ecosystem: pip" tương tự bên dưới.
+#
+# KHÔNG bật ecosystem "gradle" - android/ là thư mục Capacitor TỰ SINH RA lúc CI chạy (`npx cap
+# add android`), không tồn tại trong git, Dependabot không có gì để scan.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    # package.json hiện chỉ có 2 dependency Capacitor - major version của chúng thường đi kèm
+    # thay đổi cấu trúc project Android khá lớn, không nên tự động merge; nhóm PR minor/patch lại
+    # để đỡ spam nếu sau này còn thêm dependency khác.
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
