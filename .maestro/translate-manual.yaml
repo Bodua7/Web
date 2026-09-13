@@ -1,0 +1,95 @@
+appId: com.atun.translator
+---
+# .maestro/translate-manual.yaml
+#
+# ⚠️ CẢNH BÁO (đọc trước khi chạy hoặc sửa file này):
+# File này bị THIẾU khỏi repo (không nằm trong bất kỳ atun-translator-part*.zip nào) trong khi
+# .github/workflows/maestro-ui-test.yml đã tham chiếu tới nó từ trước - workflow đó vì vậy luôn
+# fail ngay ở bước "maestro test .maestro/translate-manual.yaml" (lỗi "file not found"). Bản viết
+# lại này dựng dựa trên ĐỌC TRỰC TIẾP www/index.html + www/app.js (id phần tử, thứ tự DOM, đúng
+# chuỗi text hiển thị) - KHÔNG chạy thử được trên emulator/thiết bị thật (môi trường soạn file
+# này không có Android SDK/emulator). Selector dựa trên "text hiển thị" vì các phần tử là DOM
+# trong WebView (Capacitor) - KHÔNG có resource-id kiểu View Android gốc, nên Maestro (dùng
+# accessibility tree) nhận diện qua text/placeholder là cách ổn định nhất có thể xác nhận qua đọc
+# code, nhưng vẫn cần chạy thật LẦN ĐẦU trên emulator để xác nhận:
+#   1) WebView có expose đúng text/placeholder qua accessibility tree hay không (đa số trường hợp
+#      có, nhưng tuỳ bản WebView/Chrome trên máy có thể khác).
+#   2) Timing thật của Supabase anonymous sign-in + gọi groq-relay (timeout đặt tạm 20s, có thể
+#      cần chỉnh nếu mạng CI runner chậm hơn).
+# Nếu bước nào fail vì "element not found", nhiều khả năng do (1) - thử đổi sang tapOn theo
+# point (%) tạm thời rồi báo lại để cập nhật selector đúng hơn.
+#
+# ===== PHẠM VI flow này =====
+# Chỉ test đường "dịch văn bản thủ công" (card đầu tiên trong index.html: #srcText ->
+# #targetLang -> #translateBtn -> #result) - đây là cách NGẮN NHẤT để xác nhận toàn bộ chuỗi
+# thật: WebView tải đúng -> Supabase Auth ẩn danh lấy được JWT -> gọi thật lên groq-relay ->
+# 1 trong các tầng dịch (Groq/Gemini/DeepL/Azure/Google Translate free) trả về kết quả -> UI hiển
+# thị đúng. KHÔNG test luồng "nghe trực tiếp" (mic/audio hệ thống) - luồng đó cần đi qua onboarding
+# xin quyền thông báo + miễn trừ pin, rồi xin quyền MediaProjection (hộp thoại hệ thống Android,
+# ngoài WebView, khó thao tác ổn định bằng Maestro) - để lại cho việc test tay trên máy thật.
+#
+# ===== Vì sao assert bằng "Chưa có câu nào được dịch." biến mất thay vì so khớp đúng câu dịch =====
+# translateBtn.onclick (app.js) gọi addTranslationLogEntry() khi dịch THÀNH CÔNG, khiến
+# renderTranslationLog() thay nội dung #translationLog (đang hiện dòng placeholder
+# "Chưa có câu nào được dịch.") bằng entry thật. Dùng tín hiệu này thay vì so khớp đúng chuỗi
+# tiếng Việt đã dịch, vì bản dịch thật (Groq/Gemini/DeepL/Google Translate free...) không cố định
+# 1-1 - tầng nào trả lời trước hôm đó có thể ra câu chữ hơi khác nhau dù cùng đúng nghĩa, so khớp
+# chính xác dễ tạo test đỏ giả (flaky) dù tính năng vẫn hoạt động đúng.
+
+# Bật panel debug NGAY từ đầu - nếu bước sau fail, ảnh chụp màn hình Maestro (upload ở bước
+# "Upload kết quả Maestro" trong maestro-ui-test.yml) sẽ thấy được log kỹ thuật thật (log() trong
+# app.js chỉ ghi ra DOM #log khi debugToggle đang bật) thay vì 1 màn hình trắng thông tin.
+- launchApp:
+    clearState: true
+- tapOn:
+    text: "Hiện log kỹ thuật \\(debug\\)"
+
+# Card dịch thủ công luôn hiển thị ngay từ đầu (không phụ thuộc onboarding quyền mic/thông báo),
+# nên không cần chờ/xử lý bước cấp quyền nào trước khi tới đây.
+- assertVisible:
+    text: "Nhập văn bản cần dịch..."
+    timeout: 15000
+
+- tapOn:
+    text: "Nhập văn bản cần dịch..."
+- inputText: "Hello, how are you today?"
+
+# KHÔNG đổi #targetLang khỏi giá trị mặc định ("vi" - Tiếng Việt, option đầu tiên trong HTML) -
+# tương tác với <select> gốc trong WebView Android render ra 1 dialog/picker NGOÀI cây view của
+# trang, dễ vỡ hơn hẳn so với các bước còn lại trong flow này. Để nguyên mặc định giữ flow đơn
+# giản/ổn định cho lần chạy đầu; xem khối comment cuối file nếu sau này muốn thêm bước đổi ngôn
+# ngữ đích sau khi đã xác nhận flow gốc chạy ổn.
+
+# "Dịch" (translateBtn) trùng tiền tố với "📂 Dịch file" (translateFileBtn) - neo bằng regex
+# khớp CHÍNH XÁC để không bấm nhầm nút dịch file.
+- tapOn:
+    text: "^Dịch$"
+
+# Bước trung gian: xác nhận đã bấm đúng nút và app đã bắt đầu gọi API (resultEl.textContent =
+# 'Đang dịch...' - xem translateBtn.onclick trong app.js) trước khi chờ kết quả thật.
+- assertVisible:
+    text: "Đang dịch..."
+    timeout: 5000
+
+# Chờ lệnh gọi mạng thật (Supabase Auth ẩn danh, nếu chưa có phiên + groq-relay + 1 trong các
+# tầng dịch) hoàn tất - 20s là ước lượng rộng rãi cho vài lần round-trip qua các tầng fallback
+# nếu tầng đầu (Groq) đang lỗi/hết quota, cần chỉnh lại nếu thực tế CI runner chậm/nhanh hơn.
+- extendedWaitUntil:
+    notVisible:
+      text: "Đang dịch..."
+    timeout: 20000
+
+# Tín hiệu thành công: xem khối comment "Vì sao assert..." ở đầu file.
+- assertNotVisible:
+    text: "Chưa có câu nào được dịch."
+
+# ===== Gợi ý mở rộng (CHƯA bật - bật dần sau khi flow gốc ở trên đã chạy ổn định) =====
+# - Đổi #targetLang sang 1 ngôn ngữ khác mặc định, ví dụ:
+#     - tapOn: "Tiếng Việt"   # mở picker (đang hiện giá trị đang chọn)
+#     - tapOn: "English"      # chọn option trong picker vừa mở
+#   rồi lặp lại 3 bước tapOn "^Dịch$" / assertVisible "Đang dịch..." / extendedWaitUntil ở trên.
+# - Test nhánh lỗi (không nhập gì, bấm "Dịch" ngay): app chỉ log('Chưa nhập văn bản.') và KHÔNG
+#   đổi #result - assert bằng cách kiểm tra "Đang dịch..." KHÔNG xuất hiện trong 1-2s.
+# - Test "📂 Dịch file": cần Maestro thao tác được hộp thoại chọn file hệ thống (file picker
+#   Android) cho <input type="file" id="srcFile">, phức tạp hơn hẳn phạm vi "smoke test" của
+#   file này - để riêng thành 1 flow khác nếu cần.
