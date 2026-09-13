@@ -360,7 +360,7 @@ jobs:
       # Cache + tối ưu invocation Gradle (dependencies, build cache) - hoạt động ngay cả khi
       # thư mục android/ vừa được sinh ra ở bước trên (không cần gradlew tồn tại từ trước).
       - name: Setup Gradle (cache tự động)
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # Chạy TRƯỚC assembleDebug - test fail thì dừng ngay, không tốn thời gian build tiếp 1 APK
       # từ code mà chính unit test vừa nói là sai.
@@ -518,7 +518,7 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Setup Gradle (cache tự động, dùng sớm hơn cho bước test)
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       # Chạy TRƯỚC mọi bước ký/patch version - release build không có lý do để tiếp tục nếu
       # unit test đang đỏ, và dừng sớm ở đây tránh phí công decode keystore/ký cho 1 bản build
