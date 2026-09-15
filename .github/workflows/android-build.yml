@@ -83,7 +83,7 @@ jobs:
       # tự setup-java tường minh 17/Temurin. Thêm bước này để Detekt luôn chạy trên đúng 1 JDK cố
       # định, không phụ thuộc "may rủi" theo runner image.
       - name: Setup JDK 17 (cho Detekt)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -290,7 +290,7 @@ jobs:
           node-version: '20'
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -501,7 +501,7 @@ jobs:
           node-version: '20'
 
       - name: Setup JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
