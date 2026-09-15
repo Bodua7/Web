@@ -1,0 +1,69 @@
+name: CodeQL
+
+# Quét bảo mật tĩnh cho JavaScript/TypeScript (www/*.js, supabase-functions/*.ts) bằng CodeQL -
+# MIỄN PHÍ cho repo public, chạy trên mỗi PR + định kỳ hàng tuần để bắt cả lỗ hổng mới phát hiện
+# trong chính CodeQL (không phải do code đổi).
+#
+# CHƯA quét Kotlin/Java (native/*.kt): CodeQL cho java-kotlin cần "autobuild" - tức phải có sẵn
+# 1 project Gradle Android THẬT để CodeQL tự build kèm theo lúc quét. android/ trong repo này
+# KHÔNG tồn tại trong git (chỉ được `npx cap add android` sinh ra lúc chạy android-build.yml) -
+# muốn quét Kotlin bằng CodeQL sẽ phải lặp lại y hệt các bước cap add android + copy native/*.kt
+# + patch-kotlin.py/patch-manifest.py NGAY TRONG workflow này trước bước autobuild, nhân đôi
+# phần lớn logic của android-build.yml ở 1 chỗ khác - để dành làm sau nếu cần, tránh 2 workflow
+# cùng phải sửa mỗi khi 1 bên đổi cấu trúc.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1" # 03:00 UTC thứ 2 hàng tuần
+
+jobs:
+  analyze:
+    runs-on: ubuntu-22.04
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ===== BẮT BUỘC, giống hệt bước "Extract project source" trong android-build.yml =====
+      # Repo này KHÔNG commit source dạng file rời - www/*.js và supabase-functions/*.ts đều
+      # nằm trong các file atun-translator-part*.zip ở gốc repo. Thiếu bước giải nén này thì
+      # CodeQL chỉ thấy các file .yml (bị nhận diện nhầm thành ngôn ngữ "GitHub Actions") mà
+      # KHÔNG thấy bất kỳ file JavaScript/TypeScript nào -> lỗi "CodeQL detected code written in
+      # GitHub Actions, but not any written in JavaScript/TypeScript". Không verify checksum ở
+      # đây (khác android-build.yml) vì mục đích chỉ để CodeQL có source mà quét, không phải để
+      # build/release.
+      - name: Extract project source (.zip)
+        run: |
+          shopt -s nullglob
+          zips=(atun-translator-part*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "Không thấy file atun-translator-part*.zip nào ở gốc repo - coi như source đã được giải nén sẵn (bỏ qua giải nén)."
+          else
+            for z in "${zips[@]}"; do
+              echo "Giải nén $z"
+              unzip -o -q "$z" -d .
+            done
+          fi
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # www/app.js không qua bundler (script thường, không module) - loại query
+          # "security-extended" quét thêm 1 số rule bảo mật ngoài bộ mặc định (mặc định vốn đã
+          # thiên về giảm false-positive, "security-extended" đánh đổi thêm vài false-positive để
+          # bắt được nhiều nhóm lỗ hổng hơn - hợp lý cho 1 file gọi thẳng API bên ngoài qua fetch).
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
